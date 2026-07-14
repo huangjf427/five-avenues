@@ -199,3 +199,35 @@ npm start
 - 当前为内存会话，多实例部署需改用 Redis 或数据库
 - 密码哈希使用 scrypt（Node 内置），生产环境建议调整 N/r/p 参数
 - 静态文件无 CDN，生产建议前置反向代理（Nginx/Caddy）
+
+## 9. RAG（检索增强生成）模块
+
+> 目标：在 WuDaDao 知识库之上，用向量检索 + 大模型生成个性化行程，作为规则化 `generator.js` 的增强与兜底替代。
+
+### 9.1 设计原则
+- **零依赖**：沿用 NFR-1。Embedding / 对话均通过 Node 18 全局 `fetch` 调用 HTTP API，不引入任何 npm 包；向量检索用预建 JSON 索引 + 纯 JS 余弦相似度，不引向量库。
+- **契约不变**：RAG 产出与 `/api/guide` 原有结构完全同构（`meta / overview / itinerary / history / architecture / shops / eventCalendar / seasonal / sources`），前端 `app.js` 的 `renderGuide()` 零改动。
+- **优雅降级**：未配置 `RAG_API_KEY`、索引缺失、模型不可用或输出非法时，自动回退到规则化 `buildGuide()`，网站永远有输出。
+
+### 9.2 目录（`app/rag/`）
+| 文件 | 职责 |
+|---|---|
+| `chunk.js` | 复用 `wiki.js` 解析结果，把页面切成带元数据的重叠语料块 |
+| `embed.js` | 调 Embedding / 对话补全（fetch，支持智谱 / DeepSeek / OpenAI 等 OpenAI 兼容服务）|
+| `retrieve.js` | 运行时余弦检索 top-K（纯 JS）|
+| `generate.js` | 检索 → 构造 prompt → 调大模型 → 解析校验为 guide 对象 |
+| `index.js` | 离线建库脚本：`node app/rag/index.js` 生成 `app/data/rag-index.json` |
+
+### 9.3 配置（`.env`，已被 gitignore）
+| 变量 | 说明 | 默认 |
+|---|---|---|
+| `RAG_API_KEY` | 服务商密钥；**未配置则全程降级到规则生成** | 空 |
+| `RAG_BASE_URL` | API Base（智谱 `https://open.bigmodel.cn/api/paas/v4`）| 智谱 |
+| `RAG_EMBED_MODEL` | 向量模型（embedding-3，2048 维）| `embedding-3` |
+| `RAG_LLM_MODEL` | 对话模型（glm-4-flash 等）| `glm-4-flash` |
+
+### 9.4 使用
+1. 准备 WuDaDao 知识库（仓库外目录，见 §2 / §7）。
+2. 复制 `.env.example` 为 `.env`，填入 `RAG_API_KEY`。
+3. 建索引：`npm run rag:index`（或 `node app/rag/index.js`）。
+4. 启动：`npm start`。前端「定制行程」勾选「AI 增强生成（RAG）」即可。

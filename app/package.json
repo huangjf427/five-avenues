@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "rag:index": "node app/rag/index.js"
   },
   "engines": {
     "node": ">=18"

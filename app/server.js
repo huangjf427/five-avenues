@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadWiki } from './src/wiki.js';
@@ -8,10 +9,48 @@ import { buildGuide } from './src/generator.js';
 import { INTERESTS, PURPOSES } from './src/recommender.js';
 import { register, login, logout, userFromToken, ensureAdmin } from './src/auth.js';
 import { createReview, listApproved, listForAdmin, moderate, counts, readAllReviews } from './src/reviews.js';
+import { buildGuideRag } from './rag/generate.js';
+import { hasRagCreds } from './rag/embed.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
+
+// 极简零依赖 .env 加载（读取 <repo>/.env，不引入 dotenv 依赖）
+function loadDotEnv() {
+  try {
+    const txt = readFileSync(join(__dirname, '..', '.env'), 'utf8');
+    for (const line of txt.split('\n')) {
+      const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)\s*$/);
+      if (m && process.env[m[1]] === undefined) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+      }
+    }
+  } catch {}
+}
+loadDotEnv();
+
 const PORT = process.env.PORT || 3000;
+
+// ---- RAG 向量索引（离线 `node app/rag/index.js` 生成；运行时惰性加载）----
+let ragIndex = null;
+let ragIndexLoading = null;
+const RAG_INDEX_FILE = join(__dirname, 'data', 'rag-index.json');
+async function getRagIndex() {
+  if (ragIndex) return ragIndex;
+  if (!hasRagCreds()) return null;
+  if (!ragIndexLoading) {
+    ragIndexLoading = (async () => {
+      try {
+        const text = await readFile(RAG_INDEX_FILE, 'utf8');
+        ragIndex = JSON.parse(text);
+        return ragIndex;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return ragIndexLoading;
+}
 
 let wikiCache = null;
 let wikiLoading = null;
@@ -116,6 +155,7 @@ const server = createServer(async (req, res) => {
       wikiCount: wiki.length,
       shopCount: extra.shops.length,
       activityCount: extra.activities.length,
+      ragEnabled: hasRagCreds(),
       reviewTargets: [
         ...extra.shops.map((s) => ({ id: s.id, name: s.title, type: 'shop' })),
         ...extra.activities.map((a) => ({ id: a.id, name: a.title, type: 'activity' })),
@@ -126,6 +166,30 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && url === '/api/guide') {
     const input = await readBody(req);
     const [wiki, extra] = await Promise.all([getWiki(), getExtra()]);
+    const useRag = !!input.useRag && hasRagCreds();
+    let rag = false;
+    try {
+      if (useRag) {
+        const index = await getRagIndex();
+        if (index) {
+          const guide = await buildGuideRag({
+            pages: wiki,
+            shops: extra.shops,
+            activities: extra.activities,
+            feedbackMap: extra.feedbackMap,
+            purposeId: input.purposeId,
+            interests: Array.isArray(input.interests) ? input.interests : [],
+            startDate: input.startDate,
+            endDate: input.endDate,
+            index,
+          });
+          guide.rag = true;
+          return sendJSON(res, 200, guide);
+        }
+      }
+    } catch (err) {
+      console.error('[guide] RAG 生成失败，降级到规则生成：', err.message);
+    }
     try {
       const guide = buildGuide({
         pages: wiki,
@@ -137,6 +201,7 @@ const server = createServer(async (req, res) => {
         startDate: input.startDate,
         endDate: input.endDate,
       });
+      guide.rag = rag;
       return sendJSON(res, 200, guide);
     } catch (err) {
       return sendJSON(res, 500, { error: '生成失败：' + err.message });
@@ -146,6 +211,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && url === '/api/reload') {
     wikiCache = null; wikiLoading = null;
     extraCache = null; extraLoading = null;
+    ragIndex = null; ragIndexLoading = null;
     const [wiki, extra] = await Promise.all([getWiki(), getExtra()]);
     return sendJSON(res, 200, {
       ok: true,

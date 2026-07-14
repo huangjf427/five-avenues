@@ -24,6 +24,15 @@ async function api(url, opts = {}) {
 async function init() {
   META = await api('/api/meta');
 
+  // RAG 开关：未配置密钥时禁用，避免误点
+  const ragChk = document.querySelector('#useRag');
+  if (ragChk) {
+    ragChk.disabled = !META.ragEnabled;
+    document.querySelector('#ragHint').textContent = META.ragEnabled
+      ? 'AI 增强生成（RAG）'
+      : 'AI 增强生成（未配置密钥）';
+  }
+
   // 行程表单
   const purposeSel = $('#purpose');
   META.purposes.forEach((p) => {
@@ -199,6 +208,7 @@ async function generate() {
     interests: selectedInterests(),
     startDate: $('#startDate').value || '',
     endDate: $('#endDate').value || '',
+    useRag: document.querySelector('#useRag')?.checked || false,
   };
 
   try {

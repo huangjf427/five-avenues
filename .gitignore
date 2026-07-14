@@ -2,6 +2,9 @@ WuDaDao
 node_modules/
 app/data/users.json
 app/data/reviews.json
+app/data/rag-index.json
+.env
+*.log
 *.tmp
 .codebuddy/
 CODEBUDDY.md
