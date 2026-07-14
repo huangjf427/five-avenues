@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>五大道 · 个性化旅行文化指南</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">五大</span>
+      <div>
+        <h1>五大道旅行文化指南</h1>
+        <p class="sub">基于本地 WuDaDao 知识库生成个性化行程</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn active" data-view="guide">定制行程</button>
+      <button class="nav-btn" data-view="wiki">游客 Wiki</button>
+      <button class="nav-btn" data-view="my-reviews" hidden>我的评价</button>
+      <button class="nav-btn admin-only" data-view="admin" hidden>审核后台</button>
+    </nav>
+    <div class="account">
+      <span id="userLabel" class="user-label"></span>
+      <button id="reloadBtn" class="ghost" title="重新加载知识库">↻ 同步</button>
+      <button id="authBtn" class="ghost">登录 / 注册</button>
+      <button id="logoutBtn" class="ghost" hidden>退出</button>
+    </div>
+  </header>
+
+  <!-- ===================== 定制行程 ===================== -->
+  <main class="layout view" id="view-guide">
+    <section class="panel form-panel">
+      <h2>定制你的行程</h2>
+
+      <label class="field">
+        <span>旅行目的</span>
+        <select id="purpose"></select>
+      </label>
+
+      <fieldset class="field">
+        <legend>兴趣方向（可多选）</legend>
+        <div id="interests" class="chips"></div>
+      </fieldset>
+
+      <div class="field row">
+        <label class="col">
+          <span>出发日期</span>
+          <input type="date" id="startDate" />
+        </label>
+        <label class="col">
+          <span>返程日期</span>
+          <input type="date" id="endDate" />
+        </label>
+      </div>
+
+      <button id="generateBtn" class="primary">生成专属指南</button>
+      <p id="status" class="status"></p>
+    </section>
+
+    <section class="panel guide-panel">
+      <div id="guide" class="guide-empty">
+        <p>填写左侧信息，点击「生成专属指南」，即可获得由本地历史知识库量身定制的五大道游览方案。</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== 游客 Wiki ===================== -->
+  <main class="layout view" id="view-wiki" hidden>
+    <section class="panel form-panel">
+      <h2>写下你的五大道感受</h2>
+      <p class="sub" style="margin-bottom:14px">分享你的行程体验，通过管理员审核后将公开展示，帮助其他游客。</p>
+
+      <label class="field">
+        <span>总体评分</span>
+        <div id="ratingStars" class="stars" data-value="0">
+          <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>评价对象</span>
+        <select id="reviewTarget"></select>
+      </label>
+
+      <label class="field">
+        <span>标题（可选）</span>
+        <input type="text" id="reviewTitle" maxlength="80" placeholder="一句话概括你的体验" />
+      </label>
+
+      <label class="field">
+        <span>评价内容</span>
+        <textarea id="reviewBody" rows="5" maxlength="2000" placeholder="讲讲你在五大道的见闻、印象最深的地方、给其他游客的建议…"></textarea>
+      </label>
+
+      <label class="field">
+        <span>标签（可选，逗号分隔）</span>
+        <input type="text" id="reviewTags" placeholder="如：适合拍照, 亲子, 建筑" />
+      </label>
+
+      <label class="anon-line">
+        <input type="checkbox" id="reviewAnon" />
+        <span id="anonHint">匿名发布（不显示我的用户名）</span>
+      </label>
+
+      <button id="submitReviewBtn" class="primary">提交评价</button>
+      <p id="reviewStatus" class="status"></p>
+    </section>
+
+    <section class="panel guide-panel">
+      <div class="reviews-head">
+        <h2>游客评价墙</h2>
+        <span id="reviewCount" class="cmeta"></span>
+      </div>
+      <div id="reviewList" class="review-list">
+        <p class="guide-empty">加载中…</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== 我的评价 ===================== -->
+  <main class="layout single view" id="view-my-reviews" hidden>
+    <section class="panel">
+      <div class="reviews-head">
+        <h2>我的评价</h2>
+        <span id="myReviewCount" class="cmeta"></span>
+      </div>
+      <div id="myReviewList" class="review-list">
+        <p class="guide-empty">加载中…</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== 审核后台 ===================== -->
+  <main class="layout single view" id="view-admin" hidden>
+    <section class="panel">
+      <div class="reviews-head">
+        <h2>评价审核后台</h2>
+        <div class="filter-tabs" id="adminFilter">
+          <button class="tab active" data-status="pending">待审核 <b id="cnt-pending">0</b></button>
+          <button class="tab" data-status="approved">已通过 <b id="cnt-approved">0</b></button>
+          <button class="tab" data-status="rejected">已拒绝 <b id="cnt-rejected">0</b></button>
+          <button class="tab" data-status="">全部</button>
+        </div>
+      </div>
+      <div id="adminList" class="review-list">
+        <p class="guide-empty">加载中…</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== 登录 / 注册 弹窗 ===================== -->
+  <div id="authModal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="authClose">×</button>
+      <div class="tab-row">
+        <button class="mtab active" data-mode="login">登录</button>
+        <button class="mtab" data-mode="register">注册</button>
+      </div>
+      <label class="field">
+        <span>用户名</span>
+        <input type="text" id="authUser" autocomplete="username" placeholder="2–24 位，支持中文/字母/数字" />
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input type="password" id="authPass" autocomplete="current-password" placeholder="至少 6 位" />
+      </label>
+      <button id="authSubmit" class="primary">登录</button>
+      <p id="authError" class="status error"></p>
+      <p class="note">游客也可不登录，直接匿名发表评价。</p>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

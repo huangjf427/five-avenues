@@ -1,0 +1,17 @@
+[
+  { "targetId": "shop-qijialin", "targetType": "shop", "rating": 5, "comment": "洋楼里吃罐焖牛肉太有氛围了，服务也稳。", "tags": ["氛围好", "适合拍照"] },
+  { "targetId": "shop-qijialin", "targetType": "shop", "rating": 4, "comment": "蛋糕不错，正餐偏贵但值得一次。", "tags": ["性价比一般"] },
+  { "targetId": "shop-minyuan-coffee", "targetType": "shop", "rating": 5, "comment": "露台绝了，下午光线拍照很出片。", "tags": ["出片", "安静"] },
+  { "targetId": "shop-minyuan-coffee", "targetType": "shop", "rating": 5, "comment": "手冲单品稳定，文创街区散步顺路。", "tags": ["咖啡好"] },
+  { "targetId": "shop-provenc", "targetType": "shop", "rating": 4, "comment": "庭院晚餐浪漫，分量偏小。", "tags": ["浪漫", "分量小"] },
+  { "targetId": "shop-starbucks-reserve", "targetType": "shop", "rating": 4, "comment": "洋楼改造很有看头，夏天避暑好。", "tags": ["建筑", "避暑"] },
+  { "targetId": "shop-wudadao-bookstore", "targetType": "shop", "rating": 5, "comment": "集章卡孩子超爱，书也挑得好。", "tags": ["亲子", "文创好"] },
+  { "targetId": "shop-laidianche", "targetType": "shop", "rating": 4, "comment": "电车主题孩子喜欢，菜偏咸。", "tags": ["亲子", "主题有趣"] },
+  { "targetId": "shop-zhengyangchun", "targetType": "shop", "rating": 5, "comment": "烤鸭皮酥，临近名人故居方便。", "tags": ["好吃", "方便"] },
+  { "targetId": "shop-guifaxiang", "targetType": "shop", "rating": 4, "comment": "麻花当伴手礼合适，现炸更好吃。", "tags": ["伴手礼"] },
+  { "targetId": "act-begonia", "targetType": "activity", "rating": 5, "comment": "四月海棠大道太美，建议早上去人少。", "tags": ["必去", "摄影"] },
+  { "targetId": "act-autumn-tour", "targetType": "activity", "rating": 5, "comment": "导览讲得很透，比自己瞎逛强太多。", "tags": ["研学", "推荐"] },
+  { "targetId": "act-coffee-market", "targetType": "activity", "rating": 4, "comment": "咖啡摊多，排队略久。", "tags": ["热闹"] },
+  { "targetId": "20-research/people/cao-kun", "targetType": "page", "rating": 4, "comment": "曹锟旧居讲解牌清晰，值得停。", "tags": ["故居"] },
+  { "targetId": "20-research/people/deguiti", "targetType": "page", "rating": 5, "comment": "德璀琳相关洋楼故事很精彩。", "tags": ["故事好"] }
+]

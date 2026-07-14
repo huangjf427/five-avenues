@@ -1,0 +1,79 @@
+[
+  {
+    "id": "act-begonia",
+    "title": "五大道海棠花节",
+    "startDate": "2026-04-05",
+    "endDate": "2026-04-20",
+    "location": "大理道",
+    "type": "节庆",
+    "tags": ["节庆", "花卉", "摄影"],
+    "summary": "每年四月大理道海棠盛放，街区举办赏花市集、街头音乐与洋楼导览，是五大道一年中最富春意的时段，适合摄影与慢逛。",
+    "relatedPages": ["10-themes/overview/spatial-timeline"]
+  },
+  {
+    "id": "act-coffee-market",
+    "title": "五大道咖啡文化市集",
+    "startDate": "2026-05-01",
+    "endDate": "2026-05-03",
+    "location": "民园广场",
+    "type": "市集",
+    "tags": ["市集", "咖啡", "休闲"],
+    "summary": "五一期间在民园广场周边集结本地独立咖啡与文创摊主，可一次尝遍街区风味，并有手冲体验与音乐现场。",
+    "relatedPages": []
+  },
+  {
+    "id": "act-open-concert",
+    "title": "民园广场夏夜露天音乐会",
+    "startDate": "2026-07-15",
+    "endDate": "2026-08-31",
+    "location": "民园广场",
+    "type": "演出",
+    "tags": ["演出", "亲子", "休闲"],
+    "summary": "盛夏每周末夜晚在民园广场举办露天音乐会，从爵士到民谣，配合洋楼夜景与晚风，是避暑夜游的核心活动。",
+    "relatedPages": []
+  },
+  {
+    "id": "act-republic-costume",
+    "title": "民国服饰与洋楼生活体验展",
+    "startDate": "2026-10-01",
+    "endDate": "2026-10-07",
+    "location": "重庆道",
+    "type": "展览",
+    "tags": ["展览", "文化", "亲子"],
+    "summary": "国庆期间于重庆道洋楼内展出民国服饰与生活物件，并提供换装拍照，把近代名流的生活场景直观地呈现在游客面前。",
+    "relatedPages": ["20-research/people/cao-kun"]
+  },
+  {
+    "id": "act-autumn-tour",
+    "title": "五大道秋季历史导览季",
+    "startDate": "2026-09-20",
+    "endDate": "2026-11-15",
+    "location": "全域（民园广场集合）",
+    "type": "导览",
+    "tags": ["导览", "历史", "研学"],
+    "summary": "秋季黄金期推出的主题步行导览，由研究者带领解读名人故居、建筑风格与租界沿革，是深度研学与文化体验的首选行程搭配。",
+    "relatedPages": ["20-research/events/zhan-xun-restoration"]
+  },
+  {
+    "id": "act-christmas-lights",
+    "title": "五大道洋楼灯光季",
+    "startDate": "2026-12-20",
+    "endDate": "2027-01-03",
+    "location": "全域",
+    "type": "节庆",
+    "tags": ["节庆", "灯光", "摄影"],
+    "summary": "岁末洋楼点亮暖色灯串，雪后街景尤为上镜，适合安静地夜间漫步，部分故居庭院开放限定灯展。",
+    "relatedPages": []
+  },
+  {
+    "id": "act-family-camp",
+    "title": "五大道亲子建筑研学营",
+    "startDate": "2026-08-10",
+    "endDate": "2026-08-20",
+    "location": "民园西里",
+    "type": "研学",
+    "tags": ["亲子", "研学", "建筑"],
+    "summary": "暑期面向家庭的建筑与城市认知工作坊，通过寻宝、绘画与模型拼装认识洋楼，配套民园西里文创体验。",
+    "relatedPages": ["20-research/places/minyuan"]
+  }
+]

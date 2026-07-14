@@ -1,0 +1,98 @@
+[
+  {
+    "id": "shop-qijialin",
+    "name": "起士林（五大道概念店）",
+    "category": "餐饮",
+    "address": "睦南道79号",
+    "road": "睦南道",
+    "features": ["百年西餐老字号", "复古拱廊", "生日蛋糕"],
+    "tags": ["美食", "历史", "西餐"],
+    "summary": "创立于 1901 年的天津西餐老字号，五大道概念店设于一处砖木洋楼内，提供俄式红菜汤、罐焖牛肉与手工蛋糕，可在洋楼厅堂里体验近代天津的西洋味觉记忆。",
+    "rating": 4.6,
+    "relatedPages": ["20-research/people/deguiti"]
+  },
+  {
+    "id": "shop-guifaxiang",
+    "name": "桂发祥十八街麻花（大理道店）",
+    "category": "购物",
+    "address": "大理道24号",
+    "road": "大理道",
+    "features": ["中华老字号", "伴手礼", "现炸麻花"],
+    "tags": ["购物", "美食", "特产"],
+    "summary": "天津麻花代表品牌，大理道门店紧邻五大道的梧桐林荫，是带回津味伴手礼的便利一站，礼盒装适合作为旅程纪念。",
+    "rating": 4.4,
+    "relatedPages": []
+  },
+  {
+    "id": "shop-minyuan-coffee",
+    "name": "民园西里咖啡馆",
+    "category": "咖啡",
+    "address": "常德道民园西里18号",
+    "road": "常德道",
+    "features": ["露台", "手冲单品", "文创街区"],
+    "tags": ["咖啡", "休闲", "文创"],
+    "summary": "藏在民园西里历史街区里的独立咖啡馆，红砖小院配露台，午后光线适合拍摄洋楼立面，是漫步五大道时小憩充电的好去处。",
+    "rating": 4.7,
+    "relatedPages": ["10-themes/overview/spatial-timeline"]
+  },
+  {
+    "id": "shop-provenc",
+    "name": "普罗旺斯花园餐厅",
+    "category": "餐饮",
+    "address": "重庆道83号",
+    "road": "重庆道",
+    "features": ["法式料理", "庭院座位", "氛围浪漫"],
+    "tags": ["美食", "休闲", "西餐"],
+    "summary": "重庆道上一栋带花园的近代洋楼改造餐厅，主打法式与地中海风味，庭院绿植环绕，适合慢节奏的晚餐与拍照。",
+    "rating": 4.5,
+    "relatedPages": []
+  },
+  {
+    "id": "shop-starbucks-reserve",
+    "name": "星巴克臻选（成都道洋楼店）",
+    "category": "咖啡",
+    "address": "成都道73号",
+    "road": "成都道",
+    "features": ["文物保护建筑", "臻选吧台", "空调休憩"],
+    "tags": ["咖啡", "休闲", "建筑"],
+    "summary": "由一处历史洋楼改造的臻选门店，保留了原有的拱券与花砖，可在空调室内欣赏建筑细部，是夏季避暑与建筑摄影的中转站。",
+    "rating": 4.3,
+    "relatedPages": ["20-research/places/minyuan"]
+  },
+  {
+    "id": "shop-wudadao-bookstore",
+    "name": "五大道文创书店",
+    "category": "书店",
+    "address": "常德道58号",
+    "road": "常德道",
+    "features": ["本地文化书", "明信片", "盖章打卡"],
+    "tags": ["文创", "购物", "文化"],
+    "summary": "主营天津近代史、建筑与城市文化主题书籍与文创，提供五大道限定明信片和集章卡，是深度研学与亲子文化游的补给点。",
+    "rating": 4.6,
+    "relatedPages": ["20-research/events/zhan-xun-restoration"]
+  },
+  {
+    "id": "shop-laidianche",
+    "name": "老电车主题餐厅",
+    "category": "餐饮",
+    "address": "马场道201号",
+    "road": "马场道",
+    "features": ["有轨电车陈设", "亲子友好", "津菜"],
+    "tags": ["美食", "亲子", "休闲"],
+    "summary": "以天津老有轨电车为主题装饰的餐厅，陈列复古车厢与站牌，菜品偏津味家常，是带小朋友边吃边了解城市交通史的轻松选择。",
+    "rating": 4.2,
+    "relatedPages": []
+  },
+  {
+    "id": "shop-zhengyangchun",
+    "name": "正阳春烤鸭（睦南道店）",
+    "category": "餐饮",
+    "address": "睦南道62号",
+    "road": "睦南道",
+    "features": ["果木烤鸭", "老字号", "宴请"],
+    "tags": ["美食", "历史", "京鲁菜"],
+    "summary": "源自 1940 年代的烤鸭老店，睦南道门店临近多栋名人故居，果木烤鸭皮酥肉嫩，适合在人文漫步后安排一顿扎实的本地正餐。",
+    "rating": 4.5,
+    "relatedPages": ["20-research/people/cao-kun"]
+  }
+]
