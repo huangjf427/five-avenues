@@ -49,9 +49,12 @@ ${context}`;
 }
 
 function parseRange(startDate, endDate) {
-  const s = startDate ? new Date(startDate) : null;
-  const e = endDate ? new Date(endDate) : null;
-  if (s && e && !isNaN(s) && !isNaN(e) && s <= e) {
+  let s = startDate ? new Date(startDate) : null;
+  let e = endDate ? new Date(endDate) : null;
+  if (s && isNaN(s)) s = null;
+  if (e && isNaN(e)) e = null;
+  if (s && e && s > e) [s, e] = [e, s];
+  if (s && e && !isNaN(s) && !isNaN(e)) {
     const days = Math.min(14, Math.max(1, Math.round((e - s) / 86400000) + 1));
     const months = new Set();
     for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) months.add(d.getMonth() + 1);

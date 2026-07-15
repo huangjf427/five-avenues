@@ -4,7 +4,7 @@
 
 const DEFAULTS = { maxChars: 900, overlap: 120 };
 
-// 按空行分段，段过长则按 maxChars 切分并保留 overlap 重叠，避免硬切断语义。
+// 按空行分段，段过长则按 maxChars 硬切并保留 overlap 重叠，避免单段过长超出嵌入模型限制。
 function splitText(text, maxChars, overlap) {
   const paras = String(text || '')
     .split(/\n{2,}/)
@@ -12,7 +12,25 @@ function splitText(text, maxChars, overlap) {
     .filter(Boolean);
   const chunks = [];
   let buf = '';
+
+  function flushBuf() {
+    if (buf.trim()) chunks.push(buf.trim());
+    buf = '';
+  }
+
   for (const p of paras) {
+    // 单段过长：先切分为符合 maxChars 的小段
+    if (p.length > maxChars) {
+      if (buf.trim()) {
+        chunks.push(buf.trim());
+        buf = '';
+      }
+      for (let i = 0; i < p.length; i += maxChars - overlap) {
+        chunks.push(p.slice(i, i + maxChars));
+      }
+      continue;
+    }
+
     if (!buf) {
       buf = p;
       continue;
@@ -25,7 +43,7 @@ function splitText(text, maxChars, overlap) {
       buf = tail + '\n' + p;
     }
   }
-  if (buf.trim()) chunks.push(buf.trim());
+  flushBuf();
   return chunks;
 }
 

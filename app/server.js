@@ -49,7 +49,10 @@ async function getRagIndex() {
       }
     })();
   }
-  return ragIndexLoading;
+  const result = await ragIndexLoading;
+  // 如果加载失败，允许下次请求重试（例如离线建库后无需重启服务）。
+  if (!result) ragIndexLoading = null;
+  return result;
 }
 
 let wikiCache = null;
