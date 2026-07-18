@@ -75,7 +75,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/reviews` | 公开列表（仅已通过评价，可选 ?targetType=&targetId= 过滤） |
-| POST | `/api/reviews` | 提交评价（无需登录，支持匿名） |
+| POST | `/api/reviews` | 提交评价（需登录；登录用户可勾选匿名） |
 | GET | `/api/my-reviews` | 我的评价（需登录，返回全部状态含 pending/rejected） |
 
 ### 3.5 管理员审核 API

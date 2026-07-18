@@ -18,7 +18,7 @@
 | **RAG 测试前置** | 复制 `.env.example` 为 `.env`，填入 `RAG_API_KEY`；`npm run rag:index`（或 `node app/rag/index.js`）生成 `app/data/rag-index.json`。未配置密钥时全程降级，无需索引。 |
 | **测试账号** | 管理员默认 `admin / admin12345`（可由 `ADMIN_USER` / `ADMIN_PASS` 覆盖）；普通用户测试时自行注册。 |
 | **验收标准** | 所有 P0 用例（FR-1~FR-4、FR-6）通过；RAG「增强」与「降级」两条路径均验证；全部权限用例（401/403/界面隔离）通过；登录越权 14 条回归全过；无 S1/S2 未解决项。 |
-| **风险提示** | ① 匿名发表 API 缺口；② 硬编码 Windows 路径（`rUYZWZ` 已暂停）；③ 内存会话重启即失效；④ `rag Design/` 需求文档与实现不一致（已闭环，详见 §1）。 |
+| **风险提示** | ① 匿名发表 API 缺口（已随 REG-14 闭环：`POST /api/reviews` 已强制登录，未登录返回 401「请先登录后再发表评价」，详见 §5 #1）；② 硬编码 Windows 路径（`rUYZWZ` 已暂停）；③ 内存会话重启即失效；④ `rag Design/` 需求文档与实现不一致（已闭环，详见 §1）。 |
 
 ---
 
@@ -77,7 +77,7 @@
 | TC-R-06 | RAG | 正常 | 建索引后无需重启即生效 | P2 | server.js |
 | TC-R-07 | RAG | 异常 | 建库脚本无密钥 → exit(2) | P2 | index.js |
 | TC-RV-01 | 评价 | 正常 | 已登录用户发表评价 | P0 | FR-2 |
-| TC-RV-02 | 评价 | 权限 | 游客（未登录）发表评价 | **P0** | FR-2/PO 决策 ⚠️ |
+| TC-RV-02 | 评价 | 权限 | 未登录发表评价 → 401 | **P0** | FR-2 / REG-14（PO 决策） |
 | TC-RV-03 | 评价 | 边界 | 评分边界（0/6/小数/非数字） | P0 | FR-2 |
 | TC-RV-04 | 评价 | 边界 | 正文最小长度（4/5 字） | P0 | FR-2 |
 | TC-RV-05 | 评价 | 边界 | 正文超 2000 字截断 | P1 | reviews.js |
@@ -227,10 +227,10 @@
 - 步骤：登录后 `POST /api/reviews` `{"rating":5,"targetType":"shop","targetId":"<id>","title":"很棒","body":"体验非常好非常满意","tags":["咖啡"]}`。
 - 期望：201；`review.status="pending"`；`authorName=<用户名>`、`anonymous=false`、`authorId` 非空；提示「审核通过后公开展示」。
 
-**TC-RV-02 游客（未登录）发表评价（权限 / P0）⚠️**
+**TC-RV-02 未登录发表评价（权限 / P0）**
 - 步骤：不携带 Cookie，`POST /api/reviews` 同上。
-- 期望（现状）：`createReview` 中 `anonymous = !user` 为真 → 仍创建 **pending 匿名评价**，`authorName="匿名游客"`。
-- ⚠️ **风险关注**：PO 在 3216ed6 已确认「必须登录后才能发表」，且前端已隐藏写评价表单（`#reviewFormPanel`）；但 **API 层未强制登录**，仍可匿名提交。建议研发在 API 层（如 `server.js` 的 `POST /api/reviews`）加登录校验，与前端行为及 PO 决策对齐。本条按「现状行为」记录，并作为 **缺陷候选** 提报。
+- 期望（正确行为）：服务端 `POST /api/reviews` 先 `currentUser(req)` 校验登录态，未登录直接返回 **401** `{ error: "请先登录后再发表评价" }`，**不创建任何评价记录**。
+- 说明：此即 PO 决策 3216ed6 / REG-14 的预期结果——「必须登录后才能发表评价」为预期产品行为。登录用户仍可通过 `anonymous:true` 勾选匿名发布（见 TC-RV-09）。本条为**预期通过用例**，非缺陷。
 
 **TC-RV-03 评分边界（边界 / P0）**
 - 步骤：分别传 `rating=0 / 6 / 3.7 / "abc" / 空`。
@@ -358,7 +358,7 @@
 | REG-13 | 登录/登出后可见性状态正确刷新 | E2 |
 | REG-14 | PO 决策闭环确认 | 必须登录才能发表；Python 文档过时已关闭 |
 
-> 完整步骤见 `regression-login-fix.md`。REG-14 已闭环，但 **TC-RV-02** 指出的「API 仍接受匿名提交」需研发补齐，否则 REG-05 仅为前端假隔离。
+> 完整步骤见 `regression-login-fix.md`。REG-14 已闭环。
 
 ---
 
@@ -374,13 +374,13 @@
 - [ ] **P0 权限隔离**：TC-P-01/02/03
 - [ ] **P0 回归**：REG-01~14
 - [ ] **P1/P2 补充**：其余边界/异常/兼容用例
-- [ ] **风险闭环**：TC-RV-02（API 匿名缺口）、TC-SEC-04（硬编码路径 `rUYZWZ`）
+- [ ] **风险闭环**：TC-RV-02（未登录发表评价 → 401「请先登录后再发表评价」，已随 REG-14 闭环）、TC-SEC-04（硬编码路径 `rUYZWZ`）
 
 ---
 
 ## 5. 风险关注点（提报测试负责人）
 
-1. **匿名发表 API 缺口（高）**：前端已按 PO 决策隐藏写评价表单（必须登录），但 `POST /api/reviews` 未强制登录，仍接受匿名提交。建议研发在 API 层加登录校验，否则 REG-05 仅为前端假隔离，存在越权/垃圾内容风险。**提报为缺陷候选，关联 rUMPYp。**
+1. **匿名发表 API 缺口（已闭环）**：原「`POST /api/reviews` 未强制登录、仍接受匿名提交」问题已修复——服务端现先校验登录态，未登录返回 401「请先登录后再发表评价」，与前端隐藏写评价表单（REG-05）及 PO 决策 3216ed6 / REG-14 完全一致，REG-05 不再是前端假隔离，越权/垃圾内容风险已消除。关联 rUMPYp 已解决。
 2. **硬编码 Windows 路径（中，已暂停）**：`server.js` 日志硬编码 `D:\workspace\WuDaDao`，非 Windows 环境知识库加载失败。关联暂停 Bug `rUYZWZ`，需排期改为可配置路径。
 3. **内存会话（低）**：重启即失效，影响「7 天免登录」体验与测试可重复性；多实例部署需 Redis/DB（DESIGN §8）。
 4. **需求文档不一致（已闭环）**：`rag Design/requirements.txt` Python 栈与 `rag Design/` 内部 Wiki 规划为过时文档，实际为 `app/rag/*` Node.js 实现。PO 已确认关闭；建议更新/补充 `rag Design/` 文档以匹配实际产品定位，避免后续误解。

@@ -264,10 +264,12 @@ const server = createServer(async (req, res) => {
     return sendJSON(res, 200, { items });
   }
 
-  // Submit a review. Login optional (anonymous allowed).
+  // Submit a review. Login required (per PO decision 3216ed6 / REG-14).
+  // Logged-in users may still post anonymously via the anonymous flag.
   if (req.method === 'POST' && url === '/api/reviews') {
-    const body = await readBody(req);
     const user = await currentUser(req);
+    if (!user) return sendJSON(res, 401, { error: '请先登录后再发表评价' });
+    const body = await readBody(req);
     try {
       const review = await createReview(body, user);
       return sendJSON(res, 201, {
