@@ -11,6 +11,10 @@
 
 * { box-sizing: border-box; }
 
+/* 全局保护：[hidden] 必须隐藏，防止任何 display 规则意外覆盖导致
+   未登录时「我的评价」「评价审核后台」等按钮仍可见。 */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;

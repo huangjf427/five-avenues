@@ -24,14 +24,6 @@ async function api(url, opts = {}) {
 async function init() {
   META = await api('/api/meta');
 
-  // RAG 开关：未配置密钥时禁用，避免误点
-  const ragChk = document.querySelector('#useRag');
-  if (ragChk) {
-    ragChk.disabled = !META.ragEnabled;
-    document.querySelector('#ragHint').textContent = META.ragEnabled
-      ? 'AI 增强生成（RAG）'
-      : 'AI 增强生成（未配置密钥）';
-  }
 
   // 行程表单
   const purposeSel = $('#purpose');
@@ -77,6 +69,11 @@ function setupNav() {
 }
 
 function showView(view) {
+  // 访问控制：未登录禁止进入「我的评价」；非管理员禁止进入「审核后台」。
+  // 即使按钮被隐藏，这里也作为纵深防御拦截直接调用。
+  if (view === 'my-reviews' && !CURRENT_USER) view = 'guide';
+  if (view === 'admin' && !(CURRENT_USER && CURRENT_USER.role === 'admin')) view = 'guide';
+
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
   if (view === 'wiki') loadReviews();
@@ -104,6 +101,10 @@ function setupAuth() {
 
   // 登录按钮
   $('#authBtn').addEventListener('click', open);
+
+  // 游客 Wiki 中的「登录 / 注册」引导按钮
+  const wikiLoginBtn = $('#wikiLoginBtn');
+  if (wikiLoginBtn) wikiLoginBtn.addEventListener('click', open);
 
   // 关闭按钮 — 用委托确保可靠
   $('#authClose').addEventListener('click', (e) => {
@@ -174,10 +175,24 @@ function applyUser() {
   $('#userLabel').textContent = loggedIn ? `${CURRENT_USER.username}${isAdmin ? '（管理员）' : ''}` : '';
   $('#authBtn').hidden = loggedIn;
   $('#logoutBtn').hidden = !loggedIn;
-  $('.admin-only').hidden = !isAdmin;
-  // Show/hide "My Reviews" tab
+
+  // 未登录时隐藏「我的评价」「评价审核后台」导航按钮（安全兜底）。
+  // 用 querySelectorAll 处理所有 admin-only 元素，避免漏掉。
+  $$('.admin-only').forEach((el) => { el.hidden = !isAdmin; });
   const myReviewsBtn = document.querySelector('[data-view="my-reviews"]');
   if (myReviewsBtn) myReviewsBtn.hidden = !loggedIn;
+
+  // 未登录时强制隐藏对应视图面板，防止通过历史记录/直接调用进入。
+  const myReviewsView = $('#view-my-reviews');
+  const adminView = $('#view-admin');
+  if (myReviewsView && !loggedIn) myReviewsView.hidden = true;
+  if (adminView && !isAdmin) adminView.hidden = true;
+
+  // 游客 Wiki：未登录时隐藏「写评价」表单，改显示登录引导；登录后展示表单
+  const formPanel = $('#reviewFormPanel');
+  const loginPrompt = $('#reviewLoginPrompt');
+  if (formPanel) formPanel.hidden = !loggedIn;
+  if (loginPrompt) loginPrompt.hidden = loggedIn;
 
   // 匿名选项文案
   const hint = $('#anonHint');

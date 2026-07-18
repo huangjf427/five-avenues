@@ -1,0 +1,18 @@
+# RAG 知识库内部 Wiki - 依赖清单
+# 核心 RAG
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-chroma>=0.1.0
+chromadb>=0.5.0
+sentence-transformers>=2.7.0
+# 文档解析
+pypdf>=4.0.0
+python-docx>=1.1.0
+markdown>=3.6
+# Web(交互式形态可选)
+fastapi>=0.110.0
+uvicorn>=0.29.0
+jinja2>=3.1.0
+# 工具
+pyyaml>=6.0
+tqdm>=4.66.0

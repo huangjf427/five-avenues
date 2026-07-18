@@ -73,7 +73,7 @@
 
   <!-- ===================== 游客 Wiki ===================== -->
   <main class="layout view" id="view-wiki" hidden>
-    <section class="panel form-panel">
+    <section class="panel form-panel" id="reviewFormPanel">
       <h2>写下你的五大道感受</h2>
       <p class="sub" style="margin-bottom:14px">分享你的行程体验，通过管理员审核后将公开展示，帮助其他游客。</p>
 
@@ -111,6 +111,12 @@
 
       <button id="submitReviewBtn" class="primary">提交评价</button>
       <p id="reviewStatus" class="status"></p>
+    </section>
+
+    <section class="panel form-panel" id="reviewLoginPrompt" hidden>
+      <h2>分享你的五大道体验</h2>
+      <p class="sub" style="margin-bottom:14px">登录或注册后，即可发表你的行程评价。通过管理员审核后，你的评价会出现在下方游客评价墙上，帮助其他游客。</p>
+      <button id="wikiLoginBtn" class="primary">登录 / 注册</button>
     </section>
 
     <section class="panel guide-panel">
@@ -173,7 +179,7 @@
       </label>
       <button id="authSubmit" class="primary">登录</button>
       <p id="authError" class="status error"></p>
-      <p class="note">游客也可不登录，直接匿名发表评价。</p>
+      <p class="note">登录后即可发表你的五大道评价（可选择匿名），通过审核后展示在游客评价墙。</p>
     </div>
   </div>
 
