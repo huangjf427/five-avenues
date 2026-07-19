@@ -71,7 +71,7 @@
 
 - 首次启动自动创建管理员，默认 `admin` / `admin12345`。
 - 环境变量覆盖：`ADMIN_USER`、`ADMIN_PASS`。
-- 游客可注册登录，也可**不登录匿名**发表评价。
+- 游客需先**登录**才能发表评价（登录后可选匿名发布）；未登录提交将被拒绝（见 `REQUIREMENTS.md` FR-2 / REG-14）。
 - 会话为进程内内存 token（Cookie `fa_session`），重启后需重新登录。
 
 > `users.json` 含密码哈希，请勿提交到公开仓库（建议加入 .gitignore）。
