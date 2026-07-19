@@ -1,2 +1,4 @@
+⚠️ 已过时（归档）：本文件属早期「RAG 内部 Wiki（Python）」规划碎片，已被 Node.js 实现取代；权威文档见仓库根 REQUIREMENTS.md / DESIGN.md。
+
 待办:确认知识库的文档格式范围。
 提醒:新成员 onboarding 时优先阅读 Wiki 的"产品全流程"章节。

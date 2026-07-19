@@ -1,4 +1,6 @@
 # RAG 知识库内部 Wiki - 依赖清单
+
+# ⚠️ 已过时：此为早期 Python 规划依赖，实际产品为 Node.js 零依赖实现，无需本清单。详见 00-已过时归档说明.md
 # 核心 RAG
 langchain>=0.2.0
 langchain-community>=0.2.0

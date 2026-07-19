@@ -1,4 +1,5 @@
 # RAG 技术简介
+> 📌 本文为 RAG 通用技术科普，属早期「RAG 内部 Wiki（Python）」规划配套资料，规划背景已过时。实际实现见 `app/rag/*`（Node.js），产品需求见 `REQUIREMENTS.md` / `DESIGN.md §9`。
 
 检索增强生成(Retrieval-Augmented Generation,RAG)是一种将外部知识检索与大语言模型生成相结合的技术。
 
