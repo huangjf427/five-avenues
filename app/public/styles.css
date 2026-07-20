@@ -248,3 +248,39 @@ button { cursor: pointer; font-size: 14px; border-radius: 10px; border: 1px soli
   body { background: #fff; }
   .day-card, .card { break-inside: avoid; }
 }
+
+/* ===================== V1.2 新增样式 ===================== */
+/* FR-9 RAG 状态 */
+.rag-status { font-size: 12px; margin: 2px 0 4px; }
+.rag-status.ok { color: #2f7d4f; font-weight: 600; }
+.rag-status.off { color: var(--muted); }
+.rag-guide { margin: 4px 0 10px; padding: 8px 10px; background: var(--accent-soft); border-radius: 10px; font-size: 13px; }
+.rag-reason { color: var(--accent); margin-right: 8px; }
+.link-btn {
+  background: none; border: none; color: var(--accent); font-size: 13px;
+  text-decoration: underline; padding: 0; border-radius: 0;
+}
+.link-btn:hover { filter: brightness(1.1); }
+
+/* FR-10 溯源 */
+.src-details { font-size: 13px; margin-top: 6px; }
+.src-details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.src-list { margin: 6px 0 0; padding-left: 18px; }
+.src-list li { margin: 3px 0; }
+
+/* FR-11 / FR-12 评价卡操作行 */
+.review-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.helpful.voted { background: var(--accent); color: #fff; border-color: var(--accent); }
+.report-link { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+.report-link:hover { color: var(--accent); border-color: var(--accent); }
+
+/* FR-13 审核工作台：批量 + 举报 */
+.batch-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 10px 0 4px; padding: 8px 10px; background: var(--accent-soft);
+  border-radius: 10px; font-size: 13px;
+}
+.batch-bar .selall { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.batch-cell { display: inline-flex; align-items: center; margin-right: 8px; }
+.review-card { display: flex; align-items: flex-start; gap: 4px; }
+.review-card > .ct { flex: 1; }

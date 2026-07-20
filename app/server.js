@@ -8,7 +8,9 @@ import { loadExtra } from './src/data.js';
 import { buildGuide } from './src/generator.js';
 import { INTERESTS, PURPOSES } from './src/recommender.js';
 import { register, login, logout, userFromToken, ensureAdmin } from './src/auth.js';
-import { createReview, listApproved, listForAdmin, moderate, counts, readAllReviews } from './src/reviews.js';
+import { createReview, listApproved, listForAdmin, moderate, counts, readAllReviews, toggleHelpful, batchModerate } from './src/reviews.js';
+import { createReport, listReports, reportCounts, resolveReport, reportReasons } from './src/reports.js';
+import { track } from './src/analytics.js';
 import { buildGuideRag } from './rag/generate.js';
 import { hasRagCreds } from './rag/embed.js';
 import { buildRagIndex } from './rag/build.js';
@@ -172,6 +174,19 @@ const server = createServer(async (req, res) => {
   // ---------- existing itinerary APIs ----------
   if (req.method === 'GET' && url === '/api/meta') {
     const [wiki, extra] = await Promise.all([getWiki(), getExtra()]);
+    // FR-9：RAG 可用状态 = 已配密钥 且 索引存在。缺任一项则给出明确原因与配置指引。
+    let ragIndexExists = false;
+    if (hasRagCreds()) {
+      try { ragIndexExists = !!(await getRagIndex()); } catch { ragIndexExists = false; }
+    }
+    const ragAvailable = hasRagCreds() && ragIndexExists;
+    const ragUnavailableReason = !hasRagCreds()
+      ? '未配置 RAG_API_KEY'
+      : !ragIndexExists
+        ? 'RAG 索引缺失（请运行 npm run rag:index 生成）'
+        : '';
+    const ragConfigGuide =
+      '在 .env 配置 RAG_API_KEY（及 RAG_BASE_URL / RAG_EMBED_MODEL 等），然后运行 npm run rag:index 生成向量索引。';
     return sendJSON(res, 200, {
       interests: INTERESTS,
       purposes: PURPOSES,
@@ -179,6 +194,10 @@ const server = createServer(async (req, res) => {
       shopCount: extra.shops.length,
       activityCount: extra.activities.length,
       ragEnabled: hasRagCreds(),
+      ragIndexExists,
+      ragAvailable,
+      ragUnavailableReason,
+      ragConfigGuide,
       // FR-8：向前端暴露知识库来源与可达状态
       kbConfigured: !!process.env.WUDADAO_KB_PATH,
       wikiSource,
@@ -188,6 +207,7 @@ const server = createServer(async (req, res) => {
         ...extra.shops.map((s) => ({ id: s.id, name: s.title, type: 'shop' })),
         ...extra.activities.map((a) => ({ id: a.id, name: a.title, type: 'activity' })),
       ],
+      reportReasons: reportReasons(),
     });
   }
 
@@ -196,6 +216,7 @@ const server = createServer(async (req, res) => {
     const [wiki, extra] = await Promise.all([getWiki(), getExtra()]);
     const useRag = !!input.useRag && hasRagCreds();
     let rag = false;
+    let ragDegraded = false;
     try {
       if (useRag) {
         const index = await getRagIndex();
@@ -214,8 +235,10 @@ const server = createServer(async (req, res) => {
           guide.rag = true;
           return sendJSON(res, 200, guide);
         }
+        ragDegraded = true; // 已配密钥但索引缺失 → 降级
       }
     } catch (err) {
+      ragDegraded = true; // RAG 实际生成失败 → 降级
       console.error('[guide] RAG 生成失败，降级到规则生成：', err.message);
     }
     try {
@@ -230,6 +253,7 @@ const server = createServer(async (req, res) => {
         endDate: input.endDate,
       });
       guide.rag = rag;
+      guide.ragDegraded = ragDegraded;
       return sendJSON(res, 200, guide);
     } catch (err) {
       return sendJSON(res, 500, { error: '生成失败：' + err.message });
@@ -259,6 +283,16 @@ const server = createServer(async (req, res) => {
       activityCount: extra.activities.length,
       ragRebuild,
     });
+  }
+
+  // ---------- analytics sink (T-M.2/3: 前端事件统一经此后转，端点服务端可控、避开 CORS) ----------
+  if (req.method === 'POST' && url === '/api/analytics') {
+    const body = await readBody(req);
+    const event = String(body.event || '');
+    if (!event) return sendJSON(res, 400, { error: '缺少 event' });
+    // 合规（NFR-8）：服务端只透传脱敏字段，不在此补充任何隐私红线数据。
+    track(event, body.fields || {});
+    return sendJSON(res, 200, { ok: true });
   }
 
   // ---------- account management ----------
@@ -318,6 +352,45 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // FR-11：切换当前登录用户对某条已通过评价的「有用」投票。
+  const helpfulMatch = url.match(/^\/api\/reviews\/([^/]+)\/helpful$/);
+  if (req.method === 'POST' && helpfulMatch) {
+    const user = await currentUser(req);
+    if (!user) return sendJSON(res, 401, { error: '请先登录后再投票' });
+    try {
+      const result = await toggleHelpful(decodeURIComponent(helpfulMatch[1]), user);
+      // T-M.2 前端已上报 review_helpful，这里服务端兜底双写（action 以实际变化为准）。
+      track('review_helpful', { review_id: helpfulMatch[1], action: result.voted ? 'add' : 'remove' });
+      return sendJSON(res, 200, result);
+    } catch (err) {
+      return sendJSON(res, 400, { error: err.message });
+    }
+  }
+
+  // FR-12：登录用户举报某条已通过评价（含原因）。
+  const reportMatch = url.match(/^\/api\/reviews\/([^/]+)\/report$/);
+  if (req.method === 'POST' && reportMatch) {
+    const user = await currentUser(req);
+    if (!user) return sendJSON(res, 401, { error: '请先登录后再举报' });
+    const body = await readBody(req);
+    try {
+      const result = await createReport({
+        reviewId: decodeURIComponent(reportMatch[1]),
+        reason: body.reason,
+        user,
+      });
+      // T-M.2 服务端双写 review_report（脱敏：仅原因分类长度，不含举报正文全文）。
+      track('review_report', {
+        review_id: reportMatch[1],
+        reason_length: String(body.reason || '').length,
+        reporter_role: user.role === 'admin' ? 'admin' : 'visitor',
+      });
+      return sendJSON(res, 201, { ...result, message: '举报已提交，管理员将尽快处理。' });
+    } catch (err) {
+      return sendJSON(res, 400, { error: err.message });
+    }
+  }
+
   // ---------- my reviews (authenticated users only) ----------
   if (req.method === 'GET' && url === '/api/my-reviews') {
     const u = await currentUser(req);
@@ -357,6 +430,62 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       try {
         const result = await moderate(decodeURIComponent(modMatch[1]), body, user);
+        return sendJSON(res, 200, result);
+      } catch (err) {
+        return sendJSON(res, 400, { error: err.message });
+      }
+    }
+
+    // FR-13.2：批量通过 / 拒绝评价（单条失败不中断整批）。
+    const batchMatch = url.match(/^\/api\/admin\/reviews\/batch$/);
+    if (req.method === 'POST' && batchMatch) {
+      const body = await readBody(req);
+      try {
+        const result = await batchModerate(
+          Array.isArray(body.ids) ? body.ids : [],
+          body.action,
+          user
+        );
+        return sendJSON(res, 200, result);
+      } catch (err) {
+        return sendJSON(res, 400, { error: err.message });
+      }
+    }
+
+    // ---------- 举报工单（FR-12 / FR-13.1） ----------
+    if (req.method === 'GET' && url === '/api/admin/reports') {
+      const [items, stats, allReviews] = await Promise.all([
+        listReports({ status: query.status }),
+        reportCounts(),
+        readAllReviews(),
+      ]);
+      const byId = new Map(allReviews.map((r) => [r.id, r]));
+      const enriched = items.map((it) => {
+        const rv = byId.get(it.reviewId);
+        return {
+          ...it,
+          reviewTitle: rv ? rv.title || '(无标题)' : '(评价已删除)',
+          reviewStatus: rv ? rv.status : 'gone',
+          reviewExcerpt: rv ? rv.body.slice(0, 120) : '',
+          reviewFlagged: rv ? !!rv.flagged : false,
+        };
+      });
+      return sendJSON(res, 200, { items: enriched, counts: stats });
+    }
+
+    const repDetail = url.match(/^\/api\/admin\/reports\/([^/]+)$/);
+    if (req.method === 'GET' && repDetail) {
+      const id = decodeURIComponent(repDetail[1]);
+      const list = await listReports();
+      const r = list.find((x) => x.id === id);
+      return sendJSON(res, 200, r ? { report: r } : { error: '举报工单不存在' });
+    }
+
+    const repResolve = url.match(/^\/api\/admin\/reports\/([^/]+)\/resolve$/);
+    if (req.method === 'POST' && repResolve) {
+      const body = await readBody(req);
+      try {
+        const result = await resolveReport(decodeURIComponent(repResolve[1]), body, user);
         return sendJSON(res, 200, result);
       } catch (err) {
         return sendJSON(res, 400, { error: err.message });

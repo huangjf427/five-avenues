@@ -57,8 +57,9 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/meta` | 元数据：兴趣、目的、店铺/活动列表、知识库数量 |
-| POST | `/api/guide` | 生成个性化行程（接受 purposeId, interests[], startDate, endDate） |
+| GET | `/api/meta` | 元数据：兴趣、目的、店铺/活动列表、知识库数量、**RAG 降级字段**（`ragAvailable` / `ragUnavailableReason` / `ragConfigGuide` / `ragIndexExists`）、`reportReasons` |
+| POST | `/api/guide` | 生成个性化行程（接受 purposeId, interests[], startDate, endDate）；响应含 `rag`（是否 RAG 生成）与 `ragDegraded`（已配密钥/索引缺失或生成失败时降级标志，绝不返回 500） |
+| POST | `/api/analytics` | 埋点接收端（T-M.2/3）：服务端经 `ANALYTICS_ENDPOINT` 转发；未配置则 no-op；失败静默 |
 | POST | `/api/reload` | 重新加载 WuDaDao 知识库 |
 
 ### 3.3 账号 API
@@ -74,17 +75,23 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/reviews` | 公开列表（仅已通过评价，可选 ?targetType=&targetId= 过滤） |
+| GET | `/api/reviews` | 公开列表（仅已通过评价，按 `helpfulCount` 降序 + 时间倒序；可选 ?targetType=&targetId= 过滤） |
 | POST | `/api/reviews` | 提交评价（需登录；登录用户可勾选匿名） |
+| POST | `/api/reviews/:id/helpful` | 切换「有用」投票（需登录；仅已通过评价可投，同用户去重，再次点击取消） |
+| POST | `/api/reviews/:id/report` | 提交举报（需登录；`{reason}` 非空，同用户同评价 10 分钟内去重；返回 201） |
 | GET | `/api/my-reviews` | 我的评价（需登录，返回全部状态含 pending/rejected） |
 
 ### 3.5 管理员审核 API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/admin/reviews` | 管理员列表（需登录+admin 角色，可选 ?status=pending|approved|rejected） |
+| GET | `/api/admin/reviews` | 管理员列表（需登录+admin 角色，可选 ?status=pending\|approved\|rejected） |
 | GET | `/api/admin/reviews/:id` | 单条评价详情 |
 | POST | `/api/admin/reviews/:id/moderate` | 审核操作 `{action:"approve"\|"reject", note?"..."}` |
+| POST | `/api/admin/reviews/batch` | 批量审核 `{ids:[...], action:"approve"\|"reject"}`（单条失败进入 `failed[]`，不中断整批，响应 `{succeeded:[], failed:[]}`） |
+| GET | `/api/admin/reports` | 举报工单列表（富化 `reviewTitle` / `reviewStatus` / `reviewExcerpt` / `reviewFlagged`，可选 ?status=） |
+| GET | `/api/admin/reports/:id` | 举报工单详情 |
+| POST | `/api/admin/reports/:id/resolve` | 处理举报 `{decision:"uphold"\|"dismiss", note?}`；`dismiss` 自动下架对应评价（`moderate(reject)`） |
 
 ## 4. 数据模型
 
@@ -116,6 +123,9 @@
   "authorName": "string (实名用户名 or '匿名游客')",
   "anonymous": boolean,
   "status": "pending | approved | rejected",
+  "helpfulCount": "integer (已投「有用」计数)",
+  "helpfulBy": ["uuid (投票用户 id，仅服务端可见)"],
+  "flagged": "boolean (body/title 命中敏感词预检)",
   "createdAt": "ISO-8601",
   "reviewedAt": "ISO-8601 or null",
   "reviewedBy": "uuid or null",
@@ -123,7 +133,29 @@
 }
 ```
 
-### 4.3 会话
+### 4.3 举报工单 (`reports.json`)
+
+> 新增于 V1.2（FR-12 / FR-13）。与 `reviews.json` 同属运行期数据，已在 `.gitignore` 中。
+
+```json
+{
+  "id": "uuid",
+  "reviewId": "uuid (被举报评价)",
+  "reason": "string (原因分类文本，如 垃圾广告/不实信息/不当内容/骚扰/其他)",
+  "reporterId": "uuid (仅管理员可见)",
+  "reporterName": "string (仅管理员可见)",
+  "status": "pending | resolved | dismissed",
+  "createdAt": "ISO-8601",
+  "resolvedAt": "ISO-8601 or null",
+  "resolvedBy": "string or null",
+  "decision": "uphold | dismiss | null",
+  "resolveNote": "string or null"
+}
+```
+
+> `resolved` = 采纳举报并下架评价（`decision:"dismiss"`）；`dismissed` = 驳回举报、维持评价（`decision:"uphold"`）。
+
+### 4.4 会话
 
 - Cookie 名：`fa_session`
 - 格式：内存中 token → userId 映射
@@ -170,7 +202,9 @@
 |---|---|
 | `store.js` | 原子 JSON 数组存储（写临时文件 + rename，写操作串行队列） |
 | `auth.js` | 注册、登录、登出、session token、密码验证、管理员初始化 |
-| `reviews.js` | 创建评价、公开列表（过滤 approved）、管理员列表、审核操作、统计 |
+| `reviews.js` | 创建评价、公开列表（过滤 approved，按 `helpfulCount` 排序）、管理员列表、审核操作、批量审核、有用投票 toggle、敏感词预检 |
+| `reports.js` | 举报工单创建（10 分钟去重）、列表、统计、处理（dismiss 自动下架对应评价） |
+| `analytics.js` | 埋点双写（服务端经 `ANALYTICS_ENDPOINT` 转发；未配置则 no-op，失败静默） |
 | `generator.js` | 行程生成算法（排名、日期解析、季节性） |
 | `recommender.js` | 用户意图→wiki 标签映射、评分排序、日期重叠处理 |
 | `wiki.js` | Markdown 知识库加载（frontmatter 解析） |
@@ -194,6 +228,7 @@ npm start
 | `ADMIN_USER` | 管理员用户名 | `admin` |
 | `ADMIN_PASS` | 管理员密码 | `admin12345` |
 | `WUDADAO_KB_PATH` | 外部 WuDaDao 知识库目录（FR-8）；绝对路径或 `file://` URL，留空则使用仓库内默认 `WuDaDao/` | 空（回退默认） |
+| `ANALYTICS_ENDPOINT` | 埋点上报端点（NFR-8 / T-M.2/3）；**未配置则 `/api/analytics` 静默 no-op**，不影响主流程 | 空（关闭埋点） |
 
 ### 8.3 生产注意事项
 
