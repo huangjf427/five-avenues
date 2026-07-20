@@ -193,6 +193,7 @@ npm start
 | `PORT` | 监听端口 | `3000` |
 | `ADMIN_USER` | 管理员用户名 | `admin` |
 | `ADMIN_PASS` | 管理员密码 | `admin12345` |
+| `WUDADAO_KB_PATH` | 外部 WuDaDao 知识库目录（FR-8）；绝对路径或 `file://` URL，留空则使用仓库内默认 `WuDaDao/` | 空（回退默认） |
 
 ### 8.3 生产注意事项
 
@@ -216,7 +217,8 @@ npm start
 | `embed.js` | 调 Embedding / 对话补全（fetch，支持智谱 / DeepSeek / OpenAI 等 OpenAI 兼容服务）|
 | `retrieve.js` | 运行时余弦检索 top-K（纯 JS）|
 | `generate.js` | 检索 → 构造 prompt → 调大模型 → 解析校验为 guide 对象 |
-| `index.js` | 离线建库脚本：`node app/rag/index.js` 生成 `app/data/rag-index.json` |
+| `index.js` | 离线建库脚本：`node app/rag/index.js` 生成 `app/data/rag-index.json`（依据 `WUDADAO_KB_PATH` 读取知识库）|
+| `build.js` | 复用的建库函数 `buildRagIndex()`；`index.js` 与运行时 `/api/reload` 共用，确保离线/在线读取同一配置路径 |
 
 ### 9.3 配置（`.env`，已被 gitignore）
 | 变量 | 说明 | 默认 |
@@ -228,6 +230,9 @@ npm start
 
 ### 9.4 使用
 1. 准备 WuDaDao 知识库（仓库外目录，见 §2 / §7）。
-2. 复制 `.env.example` 为 `.env`，填入 `RAG_API_KEY`。
+2. 复制 `.env.example` 为 `.env`，填入 `WUDADAO_KB_PATH`（指向外部知识库目录）与 `RAG_API_KEY`（可选）。
 3. 建索引：`npm run rag:index`（或 `node app/rag/index.js`）。
 4. 启动：`npm start`。前端「定制行程」勾选「AI 增强生成（RAG）」即可。
+5. 运行中点「↻ 同步」会依据当前 `.env` 配置重新加载知识库，并在已配 `RAG_API_KEY` 时异步重建向量索引。
+
+> **知识库可达性（FR-8）**：`WUDADAO_KB_PATH` 未配置时回退仓库内默认 `WuDaDao/`；目录不存在 / 无读权限时，行程生成降级到本地 `data/*.json` 规则生成（不静默失败），`/api/meta` 返回 `wikiStatus: "degraded"` 与错误原因，前端顶栏同步按钮旁显示「⚠ 知识库不可用」。

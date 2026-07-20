@@ -4,6 +4,9 @@
 
 const BASE = () => process.env.RAG_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
 const KEY = () => process.env.RAG_API_KEY || '';
+// 向量 / 对话路径可单独配置，适配非标准 OpenAI 兼容网关（默认 /embeddings、/chat/completions）。
+const EMBED_PATH = () => process.env.RAG_EMBED_PATH || '/embeddings';
+const CHAT_PATH = () => process.env.RAG_CHAT_PATH || '/chat/completions';
 const EMBED_MODEL = () => process.env.RAG_EMBED_MODEL || 'embedding-3';
 const LLM_MODEL = () => process.env.RAG_LLM_MODEL || 'glm-4-flash';
 
@@ -17,14 +20,15 @@ function authHeader() {
 
 // 单条文本 -> 向量
 export async function embedOne(text) {
-  const res = await fetch(`${BASE()}/embeddings`, {
+  const url = `${BASE()}${EMBED_PATH()}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: authHeader(),
     body: JSON.stringify({ model: EMBED_MODEL(), input: String(text).slice(0, 8000) }),
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    throw new Error(`embed ${res.status}: ${t.slice(0, 200)}`);
+    throw new Error(`embed ${res.status} ${url}: ${t.slice(0, 200)}`);
   }
   const j = await res.json();
   return j.data[0].embedding;
@@ -49,14 +53,15 @@ export async function embedBatch(texts, { concurrency = 3 } = {}) {
 export async function chat(messages, { temperature = 0.5, json = false } = {}) {
   const body = { model: LLM_MODEL(), messages, temperature };
   if (json) body.response_format = { type: 'json_object' };
-  const res = await fetch(`${BASE()}/chat/completions`, {
+  const url = `${BASE()}${CHAT_PATH()}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: authHeader(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    throw new Error(`chat ${res.status}: ${t.slice(0, 200)}`);
+    throw new Error(`chat ${res.status} ${url}: ${t.slice(0, 200)}`);
   }
   const j = await res.json();
   return j.choices?.[0]?.message?.content ?? '';

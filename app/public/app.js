@@ -59,6 +59,26 @@ async function init() {
   setupMyReviews();
 
   await refreshUser();
+  renderKbStatus(META);
+}
+
+// FR-8：在顶栏同步按钮旁展示知识库来源与可达状态。
+function renderKbStatus(meta) {
+  const el = $('#kbStatus');
+  if (!el || !meta) return;
+  if (meta.wikiStatus === 'degraded') {
+    el.textContent = '⚠ 知识库不可用';
+    el.className = 'kb-status warn';
+    el.title = meta.wikiError || '知识库加载失败';
+  } else if (meta.kbConfigured) {
+    el.textContent = '外部知识库';
+    el.className = 'kb-status ok';
+    el.title = `知识库来源：${meta.wikiSource || ''}`;
+  } else {
+    el.textContent = '默认知识库';
+    el.className = 'kb-status';
+    el.title = `知识库来源：${meta.wikiSource || ''}（未配置 WUDADAO_KB_PATH）`;
+  }
 }
 
 /* ============================ 导航 ============================ */
@@ -581,7 +601,11 @@ async function doModerate(id, action) {
 $('#generateBtn').addEventListener('click', generate);
 $('#reloadBtn').addEventListener('click', async () => {
   const r = await api('/api/reload', { method: 'POST' });
-  $('#status').textContent = r.ok ? `知识库已同步（${r.wikiCount} 篇）` : '同步失败';
+  let msg = r.ok ? `知识库已同步（${r.wikiCount} 篇）` : '同步失败';
+  if (r.wikiStatus === 'degraded') msg = `⚠ 知识库不可用，已降级：${r.wikiError || ''}`;
+  if (r.ragRebuild === 'started') msg += ' · RAG 索引重建中…';
+  $('#status').textContent = msg;
+  renderKbStatus(r);
 });
 
 init();

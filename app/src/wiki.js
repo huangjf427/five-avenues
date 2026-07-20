@@ -1,17 +1,38 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitFrontmatter } from './frontmatter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Wiki root = repository root / WuDaDao  (app sits in <repo>/app)
-export const WIKI_ROOT = join(__dirname, '..', '..', 'WuDaDao');
 
 const SKIP_FILES = new Set(['index.md', 'log.md', 'README.md', 'QWEN.md']);
 const CORE_ROADS = ['马场道', '睦南道', '大理道', '常德道', '重庆道', '成都道'];
 
+// FR-8：知识库位置必须可配置（.env 的 WUDADAO_KB_PATH），不得硬编码。
+// 未配置时回退到仓库内默认 WuDaDao/（保留开箱即用体验），配置值始终优先。
+export function getWikiRoot() {
+  const cfg = (process.env.WUDADAO_KB_PATH || '').trim();
+  if (cfg) {
+    // 支持绝对路径或 file:// URL 两种形式
+    return cfg.startsWith('file://') ? fileURLToPath(cfg) : cfg;
+  }
+  return join(__dirname, '..', '..', 'WuDaDao');
+}
+
 // Walk the wiki and return a structured index of content pages.
-export async function loadWiki(root = WIKI_ROOT) {
+// 目录不可达（未配置 / 路径错误 / 无读权限）时明确抛错，绝不静默返回空数组。
+export async function loadWiki(root = getWikiRoot()) {
+  try {
+    const st = await stat(root);
+    if (!st.isDirectory()) {
+      throw new Error(`WUDADAO_KB_PATH 指向的不是目录：${root}`);
+    }
+  } catch (e) {
+    if (e.code === 'ENOENT' || e.code === 'ENOTDIR') {
+      throw new Error(`知识库目录不可达：${root}（请检查 .env 中的 WUDADAO_KB_PATH 是否正确）`);
+    }
+    throw e;
+  }
   const pages = [];
   await walk(root, root, pages);
   return pages;

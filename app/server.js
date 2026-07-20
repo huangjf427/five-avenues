@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadWiki } from './src/wiki.js';
+import { loadWiki, getWikiRoot } from './src/wiki.js';
 import { loadExtra } from './src/data.js';
 import { buildGuide } from './src/generator.js';
 import { INTERESTS, PURPOSES } from './src/recommender.js';
@@ -11,6 +11,7 @@ import { register, login, logout, userFromToken, ensureAdmin } from './src/auth.
 import { createReview, listApproved, listForAdmin, moderate, counts, readAllReviews } from './src/reviews.js';
 import { buildGuideRag } from './rag/generate.js';
 import { hasRagCreds } from './rag/embed.js';
+import { buildRagIndex } from './rag/build.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -55,12 +56,31 @@ async function getRagIndex() {
   return result;
 }
 
+// FR-8：知识库可配置化 + 不可达时优雅降级（不静默失败）。
 let wikiCache = null;
 let wikiLoading = null;
+let wikiError = null;
+let wikiSource = getWikiRoot();
 
 async function getWiki() {
   if (wikiCache) return wikiCache;
-  if (!wikiLoading) wikiLoading = loadWiki().then((p) => { wikiCache = p; return p; });
+  if (!wikiLoading) {
+    wikiLoading = (async () => {
+      wikiSource = getWikiRoot();
+      try {
+        const pages = await loadWiki();
+        wikiCache = pages;
+        wikiError = null;
+        return pages;
+      } catch (e) {
+        // 知识库不可达：降级到本地 data/*.json 规则生成，但明确记录错误状态。
+        wikiError = e.message;
+        console.error('[wiki] 知识库加载失败，降级到本地数据：', e.message);
+        wikiCache = [];
+        return [];
+      }
+    })();
+  }
   return wikiLoading;
 }
 
@@ -159,6 +179,11 @@ const server = createServer(async (req, res) => {
       shopCount: extra.shops.length,
       activityCount: extra.activities.length,
       ragEnabled: hasRagCreds(),
+      // FR-8：向前端暴露知识库来源与可达状态
+      kbConfigured: !!process.env.WUDADAO_KB_PATH,
+      wikiSource,
+      wikiStatus: wikiError ? 'degraded' : 'ok',
+      wikiError: wikiError || null,
       reviewTargets: [
         ...extra.shops.map((s) => ({ id: s.id, name: s.title, type: 'shop' })),
         ...extra.activities.map((a) => ({ id: a.id, name: a.title, type: 'activity' })),
@@ -212,15 +237,27 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url === '/api/reload') {
-    wikiCache = null; wikiLoading = null;
+    wikiCache = null; wikiLoading = null; wikiError = null;
     extraCache = null; extraLoading = null;
     ragIndex = null; ragIndexLoading = null;
     const [wiki, extra] = await Promise.all([getWiki(), getExtra()]);
+    // FR-8 事件驱动：若已配置 RAG 密钥，则依据 .env 配置的知识库路径异步重建向量索引。
+    let ragRebuild = 'skipped';
+    if (hasRagCreds()) {
+      ragRebuild = 'started';
+      buildRagIndex()
+        .then(({ chunks, file }) => console.log(`[reload] RAG 索引已重建：${file}（${chunks} 块）`))
+        .catch((e) => console.error('[reload] RAG 索引重建失败：', e.message));
+    }
     return sendJSON(res, 200, {
       ok: true,
+      wikiSource,
+      wikiStatus: wikiError ? 'degraded' : 'ok',
+      wikiError: wikiError || null,
       wikiCount: wiki.length,
       shopCount: extra.shops.length,
       activityCount: extra.activities.length,
+      ragRebuild,
     });
   }
 
@@ -338,7 +375,23 @@ const admin = await ensureAdmin();
 
 server.listen(PORT, () => {
   console.log(`WuDaDao Travel Guide running at http://localhost:${PORT}`);
-  console.log(`Wiki source: ${join(__dirname, '..', '..', 'WuDaDao')}`);
+  console.log(`Wiki source: ${getWikiRoot()}${process.env.WUDADAO_KB_PATH ? '（来自 .env WUDADAO_KB_PATH）' : '（仓库内默认，未配置 WUDADAO_KB_PATH）'}`);
+  // FR-8 事件驱动：启动时空索引且已配置 RAG 密钥时，后台补建索引（不阻塞启动）。
+  if (hasRagCreds()) {
+    stat(RAG_INDEX_FILE)
+      .then(() => {})
+      .catch(() => {
+        console.log('[wiki] 未检测到 RAG 索引，后台开始重建…');
+        buildRagIndex()
+          .then(({ chunks, file }) => console.log(`[wiki] RAG 索引已重建：${file}（${chunks} 块）`))
+          .catch((e) => {
+            console.error('[wiki] RAG 索引重建失败：', e.message);
+            if (/404/.test(e.message)) {
+              console.error('[wiki] 提示：embed 接口返回 404，请检查 .env 的 RAG_BASE_URL 与 RAG_EMBED_PATH 是否指向该服务商真实的 embeddings 路由（含模型名 RAG_EMBED_MODEL）。');
+            }
+          });
+      });
+  }
   if (admin.created) {
     console.log(`[账号] 已创建管理员：用户名 "${admin.username}" 密码 "${admin.password}"（可用环境变量 ADMIN_USER / ADMIN_PASS 覆盖）`);
   } else {
