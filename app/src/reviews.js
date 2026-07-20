@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { JsonStore } from './store.js';
+import { track } from './analytics.js';
 
 // The "游客 Wiki": visitor-authored reviews of the Five Avenues experience.
 // These are DISTINCT from feedback.json (an internal ranking signal). Reviews
@@ -11,12 +12,22 @@ import { JsonStore } from './store.js';
 //     authorId|null, authorName,      // authorName may be a display name or '匿名游客'
 //     anonymous: bool,
 //     status: 'pending'|'approved'|'rejected',
-//     createdAt, reviewedAt|null, reviewedBy|null, moderationNote|null }
+//     createdAt, reviewedAt|null, reviewedBy|null, moderationNote|null,
+//     helpfulCount: int, helpfulBy: [userId],   // FR-11
+//     flagged: bool }                            // FR-13.3 敏感词预检
 
 const reviews = new JsonStore('reviews.json');
 
 const MAX_BODY = 2000;
 const MAX_TITLE = 80;
+
+// A3（研发定稿）：敏感词静态词表占位，后续可接接口 / 配置。命中即标记高危。
+const SENSITIVE_WORDS = ['广告', '微信号', '加微信', '代购', '色情', '赌博', '诈骗', '政治', '引流'];
+
+function isFlagged(text) {
+  const t = String(text || '').toLowerCase();
+  return SENSITIVE_WORDS.some((w) => t.includes(w.toLowerCase()));
+}
 
 function clampRating(r) {
   const n = Math.round(Number(r));
@@ -28,9 +39,9 @@ function clean(str, max) {
   return String(str || '').trim().slice(0, max);
 }
 
-// Public projection — never leak author id or moderation internals to visitors.
-function toPublic(r) {
-  return {
+// Public projection — never leak author id, moderation internals, or vote identities.
+function toPublic(r, opts = {}) {
+  const out = {
     id: r.id,
     rating: r.rating,
     title: r.title,
@@ -41,7 +52,11 @@ function toPublic(r) {
     authorName: r.anonymous ? '匿名游客' : r.authorName,
     anonymous: !!r.anonymous,
     createdAt: r.createdAt,
+    helpfulCount: r.helpfulCount || 0,
   };
+  // 仅当请求携带已登录用户时，附带"我是否投过票"状态（不泄露他人投票身份）。
+  if (opts.userId) out.votedByMe = Array.isArray(r.helpfulBy) && r.helpfulBy.includes(opts.userId);
+  return out;
 }
 
 export async function createReview(input, user) {
@@ -74,23 +89,41 @@ export async function createReview(input, user) {
     reviewedAt: null,
     reviewedBy: null,
     moderationNote: null,
+    helpfulCount: 0,
+    helpfulBy: [],
+    flagged: isFlagged(body + ' ' + title), // T-13.3 敏感词预检
   };
 
-  return reviews.update((list) => ({
+  const result = await reviews.update((list) => ({
     result: toPublic(record),
     next: [record, ...list],
   }));
+
+  // T-M.3 服务端双写 review_publish（脱敏：仅计数/标签/匿名/长度，不含正文全文/密码）。
+  track('review_publish', {
+    target_type: record.targetType,
+    rating: record.rating,
+    has_tags: record.tags.length > 0,
+    is_anonymous: record.anonymous,
+    char_count: record.body.length,
+  });
+  return result;
 }
 
-// Public feed: only approved reviews, newest first. Optional target filter.
-export async function listApproved({ targetType, targetId } = {}) {
+// Public feed: only approved reviews, newest first, weighted by helpful votes (A4: 1:1 叠加).
+export async function listApproved({ targetType, targetId, userId } = {}) {
   const list = await reviews.readAll();
   return list
     .filter((r) => r.status === 'approved')
     .filter((r) => (targetType ? r.targetType === targetType : true))
     .filter((r) => (targetId ? r.targetId === targetId : true))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-    .map(toPublic);
+    .sort((a, b) => {
+      // A4（研发定稿）：有用计数降序为主，创建时间倒序为辅。
+      const byHelpful = (b.helpfulCount || 0) - (a.helpfulCount || 0);
+      if (byHelpful !== 0) return byHelpful;
+      return a.createdAt < b.createdAt ? 1 : -1;
+    })
+    .map((r) => toPublic(r, { userId }));
 }
 
 // Admin view: full records, optionally filtered by status.
@@ -116,14 +149,57 @@ export async function readAllReviews() {
 export async function moderate(id, { action, note }, admin) {
   const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : null;
   if (!status) throw new Error('无效的审核操作');
-  return reviews.update((list) => {
+  const hasNote = !!clean(note, 200);
+  const result = await reviews.update((list) => {
     const idx = list.findIndex((r) => r.id === id);
     if (idx === -1) throw new Error('评价不存在');
     const r = list[idx];
     r.status = status;
     r.reviewedAt = new Date().toISOString();
     r.reviewedBy = admin.username;
-    r.moderationNote = clean(note, 200) || null;
+    r.moderationNote = hasNote ? clean(note, 200) : null;
     return { result: { id: r.id, status: r.status }, next: list };
   });
+  // T-M.3 服务端双写 review_moderate。
+  track('review_moderate', { action, has_note: hasNote, is_report_driven: false });
+  return result;
+}
+
+// FR-11：切换当前用户对某条已通过评价的「有用」投票（同用户去重，可取消）。
+export async function toggleHelpful(id, user) {
+  return reviews.update((list) => {
+    const r = list.find((x) => x.id === id);
+    if (!r) throw new Error('评价不存在');
+    if (r.status !== 'approved') throw new Error('仅已通过评价可点赞');
+    r.helpfulBy = Array.isArray(r.helpfulBy) ? r.helpfulBy : [];
+    const i = r.helpfulBy.indexOf(user.id);
+    let voted;
+    if (i === -1) {
+      r.helpfulBy.push(user.id);
+      voted = true;
+    } else {
+      r.helpfulBy.splice(i, 1);
+      voted = false;
+    }
+    r.helpfulCount = r.helpfulBy.length;
+    return { result: { helpfulCount: r.helpfulCount, voted }, next: list };
+  });
+}
+
+// FR-13.2：批量通过 / 拒绝评价。单条失败不中断整批，汇总成功与失败清单。
+export async function batchModerate(ids, action, admin) {
+  const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : null;
+  if (!status) throw new Error('无效的批量操作');
+  if (!Array.isArray(ids) || !ids.length) throw new Error('请选择至少一条评价');
+  const succeeded = [];
+  const failed = [];
+  for (const id of ids) {
+    try {
+      await moderate(id, { action }, admin);
+      succeeded.push(id);
+    } catch (e) {
+      failed.push({ id, error: e.message });
+    }
+  }
+  return { succeeded, failed };
 }

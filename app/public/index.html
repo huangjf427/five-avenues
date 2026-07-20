@@ -60,6 +60,8 @@
         <input type="checkbox" id="useRag" />
         <span id="ragHint">AI 增强生成（RAG）</span>
       </label>
+      <div id="ragStatus" class="rag-status"></div>
+      <div id="ragGuide" class="rag-guide" hidden></div>
 
       <button id="generateBtn" class="primary">生成专属指南</button>
       <p id="status" class="status"></p>
@@ -154,7 +156,14 @@
           <button class="tab" data-status="approved">已通过 <b id="cnt-approved">0</b></button>
           <button class="tab" data-status="rejected">已拒绝 <b id="cnt-rejected">0</b></button>
           <button class="tab" data-status="">全部</button>
+          <button class="tab" data-mode="reports">举报处理 <b id="cnt-reports">0</b></button>
         </div>
+      </div>
+      <div id="adminBatchBar" class="batch-bar" hidden>
+        <label class="selall"><input type="checkbox" id="batchSelAll" /> 全选本页</label>
+        <button id="batchApproveBtn" class="mini approve">批量通过</button>
+        <button id="batchRejectBtn" class="mini reject">批量拒绝</button>
+        <span id="batchCount" class="cmeta">已选 0 条</span>
       </div>
       <div id="adminList" class="review-list">
         <p class="guide-empty">加载中…</p>
@@ -181,6 +190,21 @@
       <button id="authSubmit" class="primary">登录</button>
       <p id="authError" class="status error"></p>
       <p class="note">登录后即可发表你的五大道评价（可选择匿名），通过审核后展示在游客评价墙。</p>
+    </div>
+  </div>
+
+  <!-- ===================== 举报弹窗 ===================== -->
+  <div id="reportModal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="reportClose">×</button>
+      <h3>举报评价</h3>
+      <p class="sub">请选择举报原因，管理员将尽快处理。举报不会向评价作者透露你的身份。</p>
+      <label class="field">
+        <span>举报原因</span>
+        <select id="reportReason"></select>
+      </label>
+      <button id="submitReportBtn" class="primary">提交举报</button>
+      <p id="reportStatus" class="status"></p>
     </div>
   </div>
 

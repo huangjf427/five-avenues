@@ -20,6 +20,17 @@ async function api(url, opts = {}) {
   return data;
 }
 
+// T-M.2 前端埋点：统一经 /api/analytics 转发（服务端可控端点、避开 CORS）。
+// 失败静默丢弃，绝不影响主流程。
+function trackEvent(event, fields = {}) {
+  fetch('/api/analytics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ event, fields }),
+  }).catch(() => {});
+}
+
 /* ============================ 初始化 ============================ */
 async function init() {
   META = await api('/api/meta');
@@ -57,9 +68,11 @@ async function init() {
   setupReviewForm();
   setupAdmin();
   setupMyReviews();
+  setupReportModal();
 
   await refreshUser();
   renderKbStatus(META);
+  renderRagStatus(META);
 }
 
 // FR-8：在顶栏同步按钮旁展示知识库来源与可达状态。
@@ -81,6 +94,38 @@ function renderKbStatus(meta) {
   }
 }
 
+// FR-9：定制行程页 RAG 状态徽标 + 配置指引（未配置时置灰「AI 增强生成」）。
+function renderRagStatus(meta) {
+  const el = $('#ragStatus');
+  const guide = $('#ragGuide');
+  const cb = $('#useRag');
+  if (!el || !meta) return;
+  if (meta.ragAvailable) {
+    el.textContent = '✅ AI 增强可用';
+    el.className = 'rag-status ok';
+    cb.disabled = false;
+    if (guide) guide.hidden = true;
+    return;
+  }
+  // 不可用：置灰选项 + 展示原因与配置指引入口。
+  cb.disabled = true;
+  cb.checked = false;
+  el.textContent = '⚪ AI 增强不可用';
+  el.className = 'rag-status off';
+  const reason = meta.ragUnavailableReason || 'RAG 未就绪';
+  el.title = reason;
+  if (!guide) return;
+  guide.hidden = false;
+  guide.innerHTML = `
+    <span class="rag-reason">${esc(reason)}</span>
+    <button id="ragGuideBtn" class="link-btn" type="button">查看配置指引</button>`;
+  const btn = $('#ragGuideBtn');
+  if (btn) btn.addEventListener('click', () => {
+    trackEvent('rag_config_view', { entry: 'config_guide' });
+    guide.innerHTML = `<p class="note">${esc(meta.ragConfigGuide || '')}</p>`;
+  });
+}
+
 /* ============================ 导航 ============================ */
 function setupNav() {
   $$('.nav-btn').forEach((btn) => {
@@ -99,6 +144,10 @@ function showView(view) {
   if (view === 'wiki') loadReviews();
   if (view === 'admin') loadAdmin();
   if (view === 'my-reviews') loadMyReviews();
+  trackEvent('page_view', {
+    view,
+    user_role: !CURRENT_USER ? 'visitor' : CURRENT_USER.role === 'admin' ? 'admin' : 'user',
+  });
 }
 
 /* ============================ 账号 ============================ */
@@ -249,10 +298,24 @@ async function generate() {
   try {
     const guide = await api('/api/guide', { method: 'POST', body: JSON.stringify(payload) });
     renderGuide(guide);
-    status.textContent = `已生成 · 美食·购物 ${guide.shops.length} 处 · 节事 ${guide.eventCalendar.items.length} 项`;
+    let msg = `已生成 · 美食·购物 ${guide.shops.length} 处 · 节事 ${guide.eventCalendar.items.length} 项`;
+    if (guide.rag === true) msg += ' · AI 增强生成';
+    else if (guide.ragDegraded) msg += ' · 已切换为常规生成（AI 增强暂不可用）';
+    status.textContent = msg;
+    // T-M.2 前端埋点 guide_generate（双写以服务端为准的字段不在此重复）。
+    trackEvent('guide_generate', {
+      purpose_id: payload.purposeId,
+      interests: payload.interests,
+      use_rag: !!payload.useRag,
+      rag_available: META.ragAvailable,
+      source: guide.rag ? 'rag' : 'rule',
+      success: true,
+      guide_days: guide.meta ? guide.meta.days : 0,
+    });
   } catch (e) {
     status.textContent = e.message;
     status.className = 'status error';
+    trackEvent('guide_generate', { success: false, fail_reason: e.message });
   } finally {
     btn.disabled = false;
   }
@@ -324,10 +387,16 @@ function renderGuide(g) {
     ${g.seasonal.historicalEvents.length ? '<h4 style="margin:14px 0 6px">行程月份的历史事件</h4>' + g.seasonal.historicalEvents.map((e) => `<p class="note"><b>${esc(e.title)}</b>（${e.month} 月）— ${esc(e.summary)}</p>`).join('') : ''}
   `;
 
-  const sources = g.sources.length ? `
-    <div class="sources">
-      ${g.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')}
-    </div>` : '';
+  // FR-10：溯源展示。RAG 生成标注「可溯源」并支持展开来源片段；规则生成标注「规则推荐」。
+  const ragBadge = g.rag === true
+    ? '<span class="badge">AI 增强 · 可溯源</span>'
+    : '<span class="badge badge-act">规则推荐</span>';
+  const srcList = (g.sources && g.sources.length)
+    ? `<details class="src-details"><summary>资料来源（${g.sources.length} 条，点击展开）</summary>
+        <ul class="src-list">${g.sources.map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener" data-src="${esc(s.url)}">${esc(s.title)}</a></li>`).join('')}</ul>
+      </details>`
+    : '<p class="note">本指南条目暂未标注外部来源。</p>';
+  const sources = `<div class="sources">${ragBadge}${srcList}</div>`;
 
   $('#guide').className = 'guide';
   $('#guide').innerHTML = `
@@ -344,8 +413,13 @@ function renderGuide(g) {
     <div class="section"><h3>美食与购物</h3>${shops}</div>
     <div class="section"><h3>节事日历</h3>${calendar}</div>
     <div class="section"><h3>季节与节事</h3>${seasonal}</div>
-    <div class="section"><h3>资料来源</h3>${sources || '<p class="note">本指南条目暂未标注外部来源。</p>'}</div>
+    <div class="section"><h3>资料来源</h3>${sources}</div>
   `;
+
+  // FR-10：资料来源链接点击埋点。
+  $$('#guide a[data-src]').forEach((a) => a.addEventListener('click', () => {
+    trackEvent('guide_source_click', { source_id: a.dataset.src });
+  }));
 }
 
 /* ============================ 评分星标 ============================ */
@@ -402,6 +476,42 @@ function starsOff() {
   $$('#ratingStars span').forEach((s) => s.classList.remove('on'));
 }
 
+/* ============================ 举报弹窗（FR-12） ============================ */
+let REPORT_REVIEW_ID = null;
+
+function setupReportModal() {
+  const modal = $('#reportModal');
+  if (!modal) return;
+  const sel = $('#reportReason');
+  if (sel && META && META.reportReasons) {
+    sel.innerHTML = META.reportReasons.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+  }
+  $('#reportClose').addEventListener('click', () => { modal.hidden = true; });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+  $('#submitReportBtn').addEventListener('click', async () => {
+    if (!REPORT_REVIEW_ID) return;
+    const status = $('#reportStatus');
+    const reason = $('#reportReason').value;
+    status.className = 'status';
+    status.textContent = '提交中…';
+    try {
+      const data = await api(`/api/reviews/${REPORT_REVIEW_ID}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+      status.textContent = data.message;
+      modal.hidden = true;
+      REPORT_REVIEW_ID = null;
+    } catch (e) {
+      status.className = 'status error';
+      status.textContent = e.message;
+    }
+  });
+}
+
+function openReport(id) {
+  REPORT_REVIEW_ID = id;
+  $('#reportStatus').textContent = '';
+  $('#reportModal').hidden = false;
+}
+
 /* ============================ 评价墙 ============================ */
 function starBar(r) {
   return '★★★★★☆☆☆☆☆'.slice(5 - r, 10 - r);
@@ -418,6 +528,8 @@ async function loadReviews() {
       return;
     }
     list.innerHTML = items.map(renderReviewCard).join('');
+    $$('#reviewList .helpful').forEach((b) => b.addEventListener('click', () => onHelpful(b)));
+    $$('#reviewList .report-link').forEach((b) => b.addEventListener('click', () => openReport(b.dataset.id)));
   } catch (e) {
     list.innerHTML = `<p class="status error">${esc(e.message)}</p>`;
   }
@@ -431,6 +543,15 @@ function targetLabel(r) {
 function renderReviewCard(r) {
   const date = new Date(r.createdAt).toLocaleDateString('zh-CN');
   const tags = (r.tags || []).map((t) => `<span class="feat">${esc(t)}</span>`).join('');
+  const count = r.helpfulCount || 0;
+  // FR-11：登录用户可投票（显示已投状态）；匿名仅可见计数。
+  const helpfulBtn = CURRENT_USER
+    ? `<button class="mini helpful ${r.votedByMe ? 'voted' : ''}" data-id="${r.id}">👍 有用 ${count}</button>`
+    : `<span class="cmeta">👍 ${count}</span>`;
+  // FR-12：已通过评价 + 登录用户可举报。
+  const reportBtn = CURRENT_USER
+    ? `<button class="mini report-link" data-id="${r.id}">举报</button>`
+    : '';
   return `
     <div class="card review-card">
       <div class="ct">
@@ -441,7 +562,23 @@ function renderReviewCard(r) {
       <div class="cbody">${esc(r.body).replace(/\n/g, '<br>')}</div>
       ${tags ? `<div class="feats">${tags}</div>` : ''}
       <div class="cmeta review-foot">— ${esc(r.authorName)} · ${date}</div>
+      <div class="review-actions">${helpfulBtn}${reportBtn}</div>
     </div>`;
+}
+
+// FR-11：点击「有用」→ 切换投票，更新计数与已投状态（不整页刷新）。
+async function onHelpful(btn) {
+  const id = btn.dataset.id;
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/reviews/${id}/helpful`, { method: 'POST' });
+    btn.textContent = `👍 有用 ${data.helpfulCount}`;
+    btn.classList.toggle('voted', data.voted);
+  } catch (e) {
+    alert('操作失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ============================ 我的评价 ============================ */
@@ -494,25 +631,75 @@ function renderMyReviewCard(r) {
       </div>
       <div class="cbody">${esc(r.body).replace(/\n/g, '<br>')}</div>
       ${rejectNote}
-      <div class="cmeta review-foot">— ${esc(r.anonymous ? '匿名游客' : r.authorName)} · ${date}</div>
+      <div class="cmeta review-foot">— ${esc(r.anonymous ? '匿名游客' : r.authorName)} · ${date} · 👍 ${r.helpfulCount || 0}</div>
     </div>`;
 }
 
 /* ============================ 审核后台 ============================ */
 let ADMIN_STATUS = 'pending';
+let ADMIN_MODE = 'reviews'; // 'reviews' | 'reports'
 
 function setupAdmin() {
   $$('#adminFilter .tab').forEach((t) => t.addEventListener('click', () => {
-    ADMIN_STATUS = t.dataset.status;
     $$('#adminFilter .tab').forEach((x) => x.classList.toggle('active', x === t));
+    if (t.dataset.mode === 'reports') {
+      ADMIN_MODE = 'reports';
+      ADMIN_STATUS = '';
+    } else {
+      ADMIN_MODE = 'reviews';
+      ADMIN_STATUS = t.dataset.status || '';
+    }
     loadAdmin();
   }));
+
+  // FR-13.2 批量通过 / 拒绝（单条失败不中断整批）。
+  $('#batchApproveBtn').addEventListener('click', () => doBatch('approve'));
+  $('#batchRejectBtn').addEventListener('click', () => doBatch('reject'));
+  $('#batchSelAll').addEventListener('change', (e) => {
+    $$('#adminList .batch-sel').forEach((c) => (c.checked = e.target.checked));
+    updateBatchCount();
+  });
+}
+
+function updateBatchCount() {
+  const n = $$('#adminList .batch-sel:checked').length;
+  $('#batchCount').textContent = `已选 ${n} 条`;
+  $('#adminBatchBar').hidden = ADMIN_MODE !== 'reviews' || n === 0;
+}
+
+async function doBatch(action) {
+  const ids = $$('#adminList .batch-sel:checked').map((c) => c.dataset.id);
+  if (!ids.length) return;
+  if (!confirm(`确认批量${action === 'approve' ? '通过' : '拒绝'} ${ids.length} 条评价？`)) return;
+  try {
+    const r = await api('/api/admin/reviews/batch', { method: 'POST', body: JSON.stringify({ ids, action }) });
+    let msg = `成功 ${r.succeeded.length} 条`;
+    if (r.failed.length) msg += `，失败 ${r.failed.length} 条（${r.failed.map((f) => f.error).join('；')}）`;
+    alert(msg);
+    loadAdmin();
+  } catch (e) {
+    alert('批量操作失败：' + e.message);
+  }
 }
 
 async function loadAdmin() {
   const list = $('#adminList');
   list.innerHTML = '<p class="guide-empty">加载中…</p>';
+  $('#adminBatchBar').hidden = true;
   try {
+    if (ADMIN_MODE === 'reports') {
+      const { items, counts } = await api('/api/admin/reports');
+      $('#cnt-reports').textContent = counts.pending;
+      if (!items.length) {
+        list.innerHTML = '<p class="guide-empty">暂无举报工单。</p>';
+        return;
+      }
+      list.innerHTML = items.map(renderReportCard).join('');
+      $$('#adminList [data-resolve]').forEach((btn) => btn.addEventListener('click', () => {
+        doResolve(btn.dataset.id, btn.dataset.resolve);
+      }));
+      return;
+    }
     const q = ADMIN_STATUS ? `?status=${ADMIN_STATUS}` : '';
     const { items, counts } = await api(`/api/admin/reviews${q}`);
     $('#cnt-pending').textContent = counts.pending;
@@ -526,9 +713,44 @@ async function loadAdmin() {
     $$('#adminList [data-act]').forEach((btn) => btn.addEventListener('click', () => {
       doModerate(btn.dataset.id, btn.dataset.act);
     }));
+    $$('#adminList .batch-sel').forEach((c) => c.addEventListener('change', updateBatchCount));
+    updateBatchCount();
   } catch (e) {
     list.innerHTML = `<p class="status error">${esc(e.message)}</p>`;
   }
+}
+
+async function doResolve(id, decision) {
+  const note = prompt(decision === 'dismiss' ? '下架原因（可选）：' : '驳回理由（可选）：') || '';
+  try {
+    await api(`/api/admin/reports/${id}/resolve`, { method: 'POST', body: JSON.stringify({ decision, note }) });
+    loadAdmin();
+  } catch (e) {
+    alert('操作失败：' + e.message);
+  }
+}
+
+// FR-13.1：举报工单卡片。
+function renderReportCard(r) {
+  const date = new Date(r.createdAt).toLocaleString('zh-CN');
+  const statusText = { pending: '待处理', resolved: '已采纳下架', dismissed: '已驳回举报' }[r.status] || r.status;
+  const resolveBtns = r.status === 'pending'
+    ? `<button class="mini approve" data-resolve="uphold" data-id="${r.id}">维持评价（驳回举报）</button>
+       <button class="mini reject" data-resolve="dismiss" data-id="${r.id}">下架评价（采纳举报）</button>`
+    : `<span class="cmeta">${esc(r.resolvedBy || '')} 于 ${r.resolvedAt ? new Date(r.resolvedAt).toLocaleString('zh-CN') : ''} · 决定：${r.decision === 'dismiss' ? '采纳下架' : '驳回举报'}</span>`;
+  return `
+    <div class="card review-card">
+      <div class="ct">
+        <span><b>举报原因：</b>${esc(r.reason)}</span>
+        <span class="cmeta">${statusText}</span>
+      </div>
+      <div class="cbody">
+        <div class="feats"><span class="feat">被举报评价：${esc(r.reviewTitle || '(已删除)')}</span></div>
+        ${r.reviewExcerpt ? `<p class="note">${esc(r.reviewExcerpt)}</p>` : ''}
+        <p class="note">举报人：${esc(r.reporterName)} · ${date}${r.reviewFlagged ? ' · ⚠ 命中敏感词' : ''}</p>
+      </div>
+      <div class="review-foot"><span class="mod-actions">${resolveBtns}</span></div>
+    </div>`;
 }
 
 function statusBadge(s) {
@@ -557,9 +779,10 @@ function renderAdminCard(r) {
 
   return `
     <div class="card review-card">
+      <label class="batch-cell"><input type="checkbox" class="batch-sel" data-id="${r.id}"></label>
       <div class="ct">
         <span>${r.title ? esc(r.title) : '<span class="cmeta">（无标题）</span>'}
-          <span class="stars-inline">${starBar(r.rating)}</span> ${statusBadge(r.status)}</span>
+          <span class="stars-inline">${starBar(r.rating)}</span> ${statusBadge(r.status)} ${r.flagged ? '<span class="badge badge-rej">⚠ 敏感词</span>' : ''}</span>
         <span class="cmeta">${esc(t)}</span>
       </div>
       <div class="cbody">${esc(r.body).replace(/\n/g, '<br>')}</div>
