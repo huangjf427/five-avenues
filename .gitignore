@@ -1,0 +1,18 @@
+WuDaDao
+node_modules/
+app/data/users.json
+app/data/reviews.json
+app/data/reports.json
+app/data/rag-index.json
+*.log
+*.tmp
+.codebuddy/
+.workbuddy/
+CODEBUDDY.md
+
+# 环境变量含密钥，禁止入库；.env.example 为安全模板可入库。
+.env
+.env.local
+.env.*.local
+
+
