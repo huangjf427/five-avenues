@@ -7,6 +7,7 @@ app/data/rag-index.json
 *.log
 *.tmp
 .codebuddy/
+.workbuddy/
 CODEBUDDY.md
 
 # 环境变量含密钥，禁止入库；.env.example 为安全模板可入库。
